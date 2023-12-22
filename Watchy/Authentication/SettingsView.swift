@@ -10,6 +10,19 @@ import SwiftUI
 @MainActor
 final class SettingsViewModel: ObservableObject {
     
+    @Published var authProviders: [AuthProviderOption] = []
+    @Published var authUser: AuthDataResultModel? = nil
+    
+    func loadAuthProviders() {
+        if let providers = try? AuthenticationManager.shared.getProviders() {
+            authProviders = providers
+        }
+    }
+    
+    func loadAuthUser() {
+        self.authUser = try? AuthenticationManager.shared.getAuthenticatedUser()
+    }
+    
     func signOut() throws {
         try AuthenticationManager.shared.signOut()
     }
@@ -34,6 +47,18 @@ final class SettingsViewModel: ObservableObject {
         let password = "123456"
         try await AuthenticationManager.shared.updatePassword(password: password)
     }
+    
+    func linkGoogleAccount() async throws {
+        let helper = SignInGoogleHelper()
+        let tokens = try await helper.signIn()
+        self.authUser = try await AuthenticationManager.shared.linkGoogle(tokens: tokens)
+    }
+    
+    func linkEmailAccount() async throws {
+        let email = "host@test.de"
+        let password = "123456"
+        self.authUser = try await AuthenticationManager.shared.linkEmail(email: email, password: password)
+    }
 }
 
 struct SettingsView: View {
@@ -54,8 +79,17 @@ struct SettingsView: View {
                 }
             }
             
-            emailSection
+            if viewModel.authProviders.contains(.email) {
+                emailSection
+            }
             
+            if viewModel.authUser?.isAnonymous == true {
+                anonymousSection
+            }
+        }
+        .onAppear {
+            viewModel.loadAuthProviders()
+            viewModel.loadAuthUser()
         }
         .navigationBarTitle("Settings")
     }
@@ -68,7 +102,7 @@ struct SettingsView: View {
 }
 
 extension SettingsView {
-    private var emailSection:some View {
+    private var emailSection: some View {
         Section {
             Button("Reset password") {
                 Task {
@@ -104,6 +138,34 @@ extension SettingsView {
             }
         } header: {
             Text("Email functions")
+        }
+    }
+    
+    private var anonymousSection: some View {
+        Section {
+            Button("Link Google Account") {
+                Task {
+                    do {
+                        try await viewModel.linkGoogleAccount()
+                        print("GOOGLE LINKED!")
+                    } catch {
+                        print(error)
+                    }
+                }
+            }
+            
+            Button("Link Email Account") {
+                Task {
+                    do {
+                        try await viewModel.linkEmailAccount()
+                        print("EMAIL LINKED!")
+                    } catch {
+                        print(error)
+                    }
+                }
+            }
+        } header: {
+            Text("Create account")
         }
     }
 }
